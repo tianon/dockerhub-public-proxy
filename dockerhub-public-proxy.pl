@@ -160,7 +160,7 @@ get '/v2/:org/:repo/*url' => sub {
 	return registry_req_p($c->req->method, $repo, $url, %headers)->then(sub {
 		my $tx = shift;
 		$c->res->headers->from_hash({})->from_hash($tx->res->headers->to_hash(1));
-		if ($url =~ m!sha256:!) {
+		if ($tx->res->code == 200 && $url =~ m!sha256:!) {
 			# looks like a content-addressable digest -- literally by definition, that content can't change, so let's tell the client that via cache-control
 			$c->res->headers->cache_control('public, max-age=' . (365 * 24 * 60 * 60))->vary('Accept, User-Agent');
 			# https://stackoverflow.com/a/25201898/433558
