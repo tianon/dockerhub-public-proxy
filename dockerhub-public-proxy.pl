@@ -142,21 +142,13 @@ get '/v2/:org/:repo/*url' => sub {
 		Authorization
 		Host
 	)};
-	if (
-		'ARRAY' eq ref($headers{Accept})
-		&& @{$headers{Accept}} == 1
-		&& (
-			# upgrade useless Accept: header so "curl" ise useful OOTB instead of returning a v1 manifest
-			$headers{Accept}[0] eq '*/*'
-			# ... and clients that don't accept manifest lists so they don't screw up clients that do (we don't support clients that don't support manifest lists)
-			|| $headers{Accept}[0] eq 'application/vnd.docker.distribution.manifest.v2+json'
-		)
-	) {
-		$headers{Accept} = [
-			'application/vnd.docker.distribution.manifest.list.v2+json',
-			'application/vnd.docker.distribution.manifest.v2+json',
-		];
-	}
+	# upgrade useless Accept: header so "curl" ise useful OOTB instead of returning a v1 manifest
+	# ... and clients that don't accept manifest lists so they don't screw up clients that do (we don't support clients that don't support manifest lists)
+	$headers{Accept} = [
+		'application/vnd.docker.distribution.manifest.list.v2+json',
+		'application/vnd.docker.distribution.manifest.v2+json',
+	];
+
 	return registry_req_p($c->req->method, $repo, $url, %headers)->then(sub {
 		my $tx = shift;
 		$c->res->headers->from_hash({})->from_hash($tx->res->headers->to_hash(1));
