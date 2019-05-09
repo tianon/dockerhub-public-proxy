@@ -128,7 +128,7 @@ sub registry_req_p {
 
 use Mojolicious::Lite;
 
-get '/v2/:org/:repo/*url' => sub {
+get '/v2/#org/#repo/*url' => sub {
 	my $c = shift;
 
 	$c->render_later;
