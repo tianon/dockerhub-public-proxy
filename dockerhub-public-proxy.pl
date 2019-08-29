@@ -128,7 +128,7 @@ sub registry_req_p {
 
 use Mojolicious::Lite;
 
-get '/v2/#org/#repo/*url' => sub {
+any [ 'GET', 'HEAD' ] => '/v2/#org/#repo/*url' => sub {
 	my $c = shift;
 
 	$c->render_later;
@@ -147,12 +147,21 @@ get '/v2/#org/#repo/*url' => sub {
 	$headers{Accept} = [
 		'application/vnd.docker.distribution.manifest.list.v2+json',
 		'application/vnd.docker.distribution.manifest.v2+json',
+		# TODO OCI media types!!
 	];
 
 	return registry_req_p($c->req->method, $repo, $url, %headers)->then(sub {
 		my $tx = shift;
 		$c->res->headers->from_hash({})->from_hash($tx->res->headers->to_hash(1));
-		if ($tx->res->code == 200 && $url =~ m!sha256:!) {
+		if (
+			$url =~ m!sha256:!
+			&& (
+				# success
+				$tx->res->code == 200
+				# or a redirect (also "success")
+				|| ($tx->res->code >= 300 && $tx->res->code < 400)
+			)
+		) {
 			# looks like a content-addressable digest -- literally by definition, that content can't change, so let's tell the client that via cache-control
 			$c->res->headers->cache_control('public, max-age=' . (365 * 24 * 60 * 60))->vary('Accept, User-Agent');
 			# https://stackoverflow.com/a/25201898/433558
