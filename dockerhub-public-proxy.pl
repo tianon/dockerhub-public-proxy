@@ -136,40 +136,44 @@ any [ 'GET', 'HEAD' ] => '/v2/#org/#repo/*url' => sub {
 	my $repo = $c->param('org') . '/' . $c->param('repo');
 	my $url = $c->param('url');
 
-	my %headers = %{ $c->req->headers->to_hash(1) };
-	# delete problematic headers like "Host:" and "Authorization:" (this is for public images only and we don't want to accidentally cache credentials)
-	delete @headers{qw(
-		Authorization
-		Host
-	)};
-	# upgrade useless Accept: header so "curl" ise useful OOTB instead of returning a v1 manifest
-	# ... and clients that don't accept manifest lists so they don't screw up clients that do (we don't support clients that don't support manifest lists)
-	$headers{Accept} = [
-		'application/vnd.docker.distribution.manifest.list.v2+json',
-		'application/vnd.docker.distribution.manifest.v2+json',
-		# TODO OCI media types!!
-	];
+	# ignore request headers (they can cause issues with returning the wrong "Location:" redirects thanks to X-Forwarded-*, for example)
+	my %headers = (
+		# upgrade useless Accept: header so "curl" ise useful OOTB instead of returning a v1 manifest
+		# ... and clients that don't accept manifest lists so they don't screw up clients that do (we don't support clients that don't support manifest lists)
+		Accept => [
+			'application/vnd.docker.distribution.manifest.list.v2+json',
+			'application/vnd.docker.distribution.manifest.v2+json',
+			# TODO OCI media types!!
+		],
+	);
 
 	return registry_req_p($c->req->method, $repo, $url, %headers)->then(sub {
 		my $tx = shift;
+
 		$c->res->headers->from_hash({})->from_hash($tx->res->headers->to_hash(1));
-		if (
-			$url =~ m!sha256:!
-			&& (
-				# success
-				$tx->res->code == 200
-				# or a redirect (also "success")
-				|| ($tx->res->code >= 300 && $tx->res->code < 400)
-			)
-		) {
-			# looks like a content-addressable digest -- literally by definition, that content can't change, so let's tell the client that via cache-control
-			$c->res->headers->cache_control('public, max-age=' . (365 * 24 * 60 * 60))->vary('Accept, User-Agent');
-			# https://stackoverflow.com/a/25201898/433558
+
+		my $maxAge = 0;
+		if ($url =~ m!sha256:!) {
+			# looks like a content-addressable digest -- literally by definition, that content can't change, so let's tell the client that via cache-control (if the response is something resembling success, anyhow)
+			if ($tx->res->code == 200 || $tx->res->code == 301 || $tx->res->code == 308) {
+				# 200 = success, 301 = Moved Permanently, 308 = Permanent Redirect
+				$maxAge = 365 * 24 * 60 * 60;
+				# https://stackoverflow.com/a/25201898/433558
+			}
+			elsif ($tx->res->code >= 300 && $tx->res->code < 400) {
+				# other redirects are likely somewhat less cacheable (temporary), so let's dial it back
+				$maxAge = 6 * 60 * 60;
+			}
+		}
+
+		if ($maxAge) {
+			$c->res->headers->cache_control('public, max-age=' . $maxAge);
 		}
 		else {
 			# don't cache non-digests
 			$c->res->headers->cache_control('no-cache');
 		}
+
 		$c->render(data => $tx->res->body, status => $tx->res->code);
 	}, sub {
 		$c->reply->exception(@_);
