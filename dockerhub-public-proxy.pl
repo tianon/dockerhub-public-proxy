@@ -162,7 +162,7 @@ any [ 'GET', 'HEAD' ] => '/v2/#org/#repo/*url' => sub {
 			}
 			elsif ($tx->res->code >= 300 && $tx->res->code < 400) {
 				# other redirects are likely somewhat less cacheable (temporary), so let's dial it back
-				$maxAge = 1 * 60 * 60;
+				$maxAge = 30 * 60;
 			}
 		}
 
