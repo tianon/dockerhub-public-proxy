@@ -6,6 +6,12 @@ use open ':encoding(utf8)';
 
 use Mojo::UserAgent;
 
+# optional configuration for Docker Hub credentials to help with rate limiting
+# WARNING: this will allow unauthenticated access for anyone who can hit the proxy to anything this user has access to, so please use it with care!!
+# https://docs.docker.com/docker-hub/download-rate-limit/
+# https://github.com/docker/hub-feedback/issues/1907
+my @creds = split(/\n/, Mojo::Util::trim($ENV{DOCKERHUB_PUBLIC_PROXY_CREDENTIALS} // ''));
+
 my $ua = Mojo::UserAgent->new->max_redirects(0)->connect_timeout(20)->inactivity_timeout(20)->max_response_size(1024 * 1024);
 $ua->transactor->name(join ' ',
 	# https://github.com/docker/docker/blob/v1.11.2/dockerversion/useragent.go#L13-L34
@@ -59,6 +65,14 @@ sub ua_retry_req_p {
 	return _ua_retry_req_p($uaTries, $method, @_);
 }
 
+sub _cred {
+	state $i = 0;
+	return undef unless @creds;
+	my $cred = $creds[$i];
+	$i = ($i + 1) % @creds;
+	return $cred;
+}
+
 sub _registry_req_p {
 	my $tries = shift;
 	my $method = shift;
@@ -102,7 +116,11 @@ sub _registry_req_p {
 				}
 			}
 			$authUrl = $authUrl->to_abs;
-			return ua_retry_req_p(get => $authUrl)->then(sub {
+			if (my $cred = _cred) {
+				# see description of DOCKERHUB_PUBLIC_PROXY_CREDENTIALS above
+				$authUrl->userinfo($cred);
+			}
+			return ua_retry_req_p(get => $authUrl->to_unsafe_string)->then(sub {
 				my $tokenTx = shift;
 				if (my $error = $tokenTx->error) {
 					die "failed to fetch token for $repo: " . ($error->{code} ? $error->{code} . ' -- ' : '') . $error->{message};
