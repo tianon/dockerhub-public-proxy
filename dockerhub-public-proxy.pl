@@ -156,7 +156,7 @@ any [ 'GET', 'HEAD' ] => '/v2/#org/#repo/*url' => sub {
 
 	# ignore request headers (they can cause issues with returning the wrong "Location:" redirects thanks to X-Forwarded-*, for example)
 	my %headers = (
-		# upgrade useless Accept: header so "curl" ise useful OOTB instead of returning a v1 manifest
+		# upgrade useless Accept: header so "curl" is useful OOTB instead of returning a v1 manifest
 		# ... and clients that don't accept manifest lists so they don't screw up clients that do (we don't support clients that don't support manifest lists)
 		Accept => [
 			'application/vnd.docker.distribution.manifest.list.v2+json',
