@@ -1,8 +1,5 @@
 #!/usr/bin/env perl
-use strict;
-use warnings;
-use 5.010;
-use open ':encoding(utf8)';
+use Mojo::Base -strict, -signatures;
 
 use Mojo::UserAgent;
 
@@ -146,9 +143,7 @@ sub registry_req_p {
 
 use Mojolicious::Lite;
 
-any [ 'GET', 'HEAD' ] => '/v2/#org/#repo/*url' => sub {
-	my $c = shift;
-
+any [ 'GET', 'HEAD' ] => '/v2/#org/#repo/*url' => sub ($c) {
 	$c->render_later;
 
 	my $repo = $c->param('org') . '/' . $c->param('repo');
@@ -201,8 +196,12 @@ any [ 'GET', 'HEAD' ] => '/v2/#org/#repo/*url' => sub {
 #	my $c = shift;
 #	return $c->redirect_to('https://registry-1.docker.io/v2/' . $c->param('url'));
 #};
-get '/' => sub {
-	return shift->redirect_to('https://github.com/tianon/dockerhub-public-proxy');
+get '/v2/' => sub ($c) {
+	# this is often used as a "ping" endpoint
+	$c->render(json => {});
+};
+get '/' => sub ($c) {
+	return $c->redirect_to('https://github.com/tianon/dockerhub-public-proxy');
 };
 
 app->start;
