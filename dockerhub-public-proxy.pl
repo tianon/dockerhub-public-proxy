@@ -160,13 +160,16 @@ any [ 'GET', 'HEAD' ] => '/v2/#org/#repo/*url' => sub ($c) {
 		],
 	);
 
-	return registry_req_p($c->req->method, $repo, $url, %headers)->then(sub {
+	my $cacheable = $url =~ m!/sha256:!;
+	my $tagRequest = !$cacheable && $url =~ m!^manifests/!;
+
+	return registry_req_p(($tagRequest ? 'HEAD' : $c->req->method), $repo, $url, %headers)->then(sub {
 		my $tx = shift;
 
 		$c->res->headers->from_hash({})->from_hash($tx->res->headers->to_hash(1));
 
 		my $maxAge = 0;
-		if ($url =~ m!sha256:!) {
+		if ($cacheable) {
 			# looks like a content-addressable digest -- literally by definition, that content can't change, so let's tell the client that via cache-control (if the response is something resembling success, anyhow)
 			if ($tx->res->code == 200 || $tx->res->code == 301 || $tx->res->code == 308) {
 				# 200 = success, 301 = Moved Permanently, 308 = Permanent Redirect
@@ -185,6 +188,11 @@ any [ 'GET', 'HEAD' ] => '/v2/#org/#repo/*url' => sub ($c) {
 		else {
 			# don't cache non-digests
 			$c->res->headers->cache_control('no-cache');
+		}
+
+		my $digest;
+		if ($tagRequest && ($digest = $tx->res->headers->header('docker-content-digest'))) {
+			return $c->redirect_to("/v2/$repo/manifests/$digest");
 		}
 
 		$c->render(data => $tx->res->body, status => $tx->res->code);
