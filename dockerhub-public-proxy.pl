@@ -190,6 +190,11 @@ any [ 'GET', 'HEAD' ] => '/v2/#org/#repo/*url' => sub ($c) {
 			$c->res->headers->cache_control('no-cache');
 		}
 
+		if ($tagRequest && $c->req->method ne 'HEAD') {
+			# if we converted the request to HEAD, we need to axe the Content-Length header value because we don't have the content that goes with it :D
+			$c->res->headers->content_length(0);
+		}
+
 		my $digest;
 		if ($tagRequest && ($digest = $tx->res->headers->header('docker-content-digest'))) {
 			return $c->redirect_to("/v2/$repo/manifests/$digest");
