@@ -156,7 +156,10 @@ any [ 'GET', 'HEAD' ] => '/v2/#org/#repo/*url' => sub ($c) {
 		Accept => [
 			'application/vnd.docker.distribution.manifest.list.v2+json',
 			'application/vnd.docker.distribution.manifest.v2+json',
-			# TODO OCI media types!!
+			'application/vnd.oci.image.index.v1+json',
+			'application/vnd.oci.image.manifest.v1+json',
+			'application/vnd.oci.image.config.v1+json',
+			'*/*',
 		],
 	);
 
