@@ -9,7 +9,8 @@ use Mojo::UserAgent;
 # https://github.com/docker/hub-feedback/issues/1907
 my @creds = split(/\n/, Mojo::Util::trim($ENV{DOCKERHUB_PUBLIC_PROXY_CREDENTIALS} // ''));
 
-my $ua = Mojo::UserAgent->new->max_redirects(0)->connect_timeout(20)->inactivity_timeout(20)->max_response_size(1024 * 1024);
+# max_response_size justification: https://github.com/opencontainers/distribution-spec/pull/293#issuecomment-1452780554 (allowing slightly more than registries should, just to be safe)
+my $ua = Mojo::UserAgent->new->max_redirects(0)->connect_timeout(20)->inactivity_timeout(20)->max_response_size(5 * 1024 * 1024);
 $ua->transactor->name(join ' ',
 	# https://github.com/docker/docker/blob/v1.11.2/dockerversion/useragent.go#L13-L34
 	'docker/1.11.2',
