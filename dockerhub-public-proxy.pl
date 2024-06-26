@@ -194,14 +194,15 @@ any [ 'GET', 'HEAD' ] => '/v2/#org/#repo/*url' => sub ($c) {
 			$c->res->headers->cache_control('no-cache');
 		}
 
+		# it doesn't make any sense to redirect HEAD requests -- they're not very cacheable anyhow, so all that does is double the number of requests-per-request
 		if ($tagRequest && $c->req->method ne 'HEAD') {
 			# if we converted the request to HEAD, we need to axe the Content-Length header value because we don't have the content that goes with it :D
 			$c->res->headers->content_length(0);
-		}
 
-		my $digest;
-		if ($tagRequest && ($digest = $tx->res->headers->header('docker-content-digest'))) {
-			return $c->redirect_to("/v2/$repo/manifests/$digest");
+			my $digest;
+			if ($digest = $tx->res->headers->header('docker-content-digest')) {
+				return $c->redirect_to("/v2/$repo/manifests/$digest");
+			}
 		}
 
 		$c->render(data => $tx->res->body, status => $tx->res->code);
