@@ -155,20 +155,25 @@ any [ 'GET', 'HEAD' ] => '/v2/#org/#repo/*url' => sub ($c) {
 			&& $digest
 			&& $digest ne 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' # this is the sha256 of the empty string (zero bytes)
 		) {
-			$c->res->headers->content_length(0); # just in case (because we're adding our own body below)
+			$c->res->headers->remove('Content-Length');
 			return $c->render(status => 500, data => "response (unexpectedly) missing content-length (digest $digest)");
 		}
 
 		# it doesn't make any sense to redirect HEAD requests -- they're not very cacheable anyhow, so all that does is double the number of requests-per-request
-		if ($tagRequest && $c->req->method ne 'HEAD') {
-			# if we converted the request to HEAD, we need to axe the Content-Length header value because we don't have the content that goes with it :D
-			$c->res->headers->content_length(0);
-			# (and if we're not about to redirect, we're going to error in some way, either our own error or passing along upstream's error, like 404)
+		# HOWEVER, the spec says that HEAD and GET *must* be interchangeable, so there are likely still glitches when they aren't even when we're asking for no-cache
+		if ($tagRequest) {
+			if ($c->req->method ne 'HEAD') {
+				# if we converted the request to HEAD, we need to axe the Content-Length header value because we don't have the content that goes with it :D
+				$c->res->headers->content_length(0);
+				# (and if we're not about to redirect, we're going to error in some way, either our own error or passing along upstream's error, like 404)
+			}
 
 			if ($digest) {
+				$c->res->headers->content_length(0);
 				return $c->redirect_to("/v2/$repo/manifests/$digest");
 			}
 			elsif ($tx->res->code == 200) {
+				$c->res->headers->remove('Content-Length');
 				return $c->render(status => 500, data => 'we converted the request to a HEAD, but we need to generate a redirect and did not get a Docker-Content-Digest header to tell us where to redirect to');
 			}
 		}
