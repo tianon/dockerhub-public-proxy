@@ -11,16 +11,7 @@ my @creds = split(/\n/, Mojo::Util::trim($ENV{DOCKERHUB_PUBLIC_PROXY_CREDENTIALS
 
 # max_response_size justification: https://github.com/opencontainers/distribution-spec/pull/293#issuecomment-1452780554 (allowing slightly more than registries should, just to be safe)
 my $ua = Mojo::UserAgent->new->max_redirects(0)->connect_timeout(20)->inactivity_timeout(20)->max_response_size(5 * 1024 * 1024);
-$ua->transactor->name(join ' ',
-	# https://github.com/docker/docker/blob/v1.11.2/dockerversion/useragent.go#L13-L34
-	'docker/1.11.2',
-	'go/1.6.2',
-	'git-commit/v1.11.2',
-	'kernel/4.4.11',
-	'os/linux',
-	'arch/amd64',
-	# BOGUS USER AGENTS FOR THE BOGUS USER AGENT THRONE
-);
+$ua->transactor->name($ENV{DOCKERHUB_PUBLIC_PROXY_USER_AGENT} // 'https://github.com/tianon/dockerhub-public-proxy');
 
 # the number of times to allow a single request to be attempted before considering it a lost cause
 my $uaTries = 2;
