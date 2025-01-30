@@ -11,57 +11,7 @@ my @creds = split(/\n/, Mojo::Util::trim($ENV{DOCKERHUB_PUBLIC_PROXY_CREDENTIALS
 
 # max_response_size justification: https://github.com/opencontainers/distribution-spec/pull/293#issuecomment-1452780554 (allowing slightly more than registries should, just to be safe)
 my $ua = Mojo::UserAgent->new->max_redirects(0)->connect_timeout(20)->inactivity_timeout(20)->max_response_size(5 * 1024 * 1024);
-$ua->transactor->name(join ' ',
-	# https://github.com/docker/docker/blob/v1.11.2/dockerversion/useragent.go#L13-L34
-	'docker/1.11.2',
-	'go/1.6.2',
-	'git-commit/v1.11.2',
-	'kernel/4.4.11',
-	'os/linux',
-	'arch/amd64',
-	# BOGUS USER AGENTS FOR THE BOGUS USER AGENT THRONE
-);
-
-# the number of times to allow a single request to be attempted before considering it a lost cause
-my $uaTries = 2;
-
-sub _ua_retry_req_p {
-	my $tries = shift;
-	my $method = lc(shift);
-	my @methodArgs = @_;
-
-	--$tries;
-	my $lastTry = $tries < 1;
-
-	return $ua->$method(@methodArgs)->then(sub {
-		my $tx = shift;
-		if (
-			$lastTry
-			|| !$tx->error
-			|| (
-				# if "$tx->res->code" is undefined, that usually is indicative of some kind of timeout (connect/inactivity)
-				$tx->res->code
-				&& (
-					# failure codes we consider to be a "successful" request
-					$tx->res->code == 401 # "Unauthorized"
-					|| $tx->res->code == 404 # "Not Found"
-				)
-			)
-		) {
-			return $tx;
-		}
-		say {*STDERR} 'UA error response: ' . $tx->error->{message};
-		return _ua_retry_req_p($tries, $method, @methodArgs);
-	}, sub {
-		die @_ if $lastTry;
-		say {*STDERR} 'UA error: ' . join ', ', @_;
-		return _ua_retry_req_p($tries, $method, @methodArgs);
-	});
-}
-sub ua_retry_req_p {
-	my $method = shift . '_p';
-	return _ua_retry_req_p($uaTries, $method, @_);
-}
+$ua->transactor->name($ENV{DOCKERHUB_PUBLIC_PROXY_USER_AGENT} // 'https://github.com/tianon/dockerhub-public-proxy');
 
 sub _cred {
 	state $i = 0;
@@ -90,7 +40,8 @@ sub _registry_req_p {
 		$headers{Authorization} = "Bearer $token";
 	}
 
-	return ua_retry_req_p($method => $url => \%headers)->then(sub {
+	my $methodP = lc $method . '_p';
+	return $ua->$methodP($url, \%headers)->then(sub {
 		my $tx = shift;
 		if (!$lastTry && $tx->res->code == 401) {
 			# "Unauthorized" -- we must need to go fetch a token for this registry request (so let's go do that, then retry the original registry request)
@@ -118,7 +69,7 @@ sub _registry_req_p {
 				# see description of DOCKERHUB_PUBLIC_PROXY_CREDENTIALS above
 				$authUrl->userinfo($cred);
 			}
-			return ua_retry_req_p(get => $authUrl->to_unsafe_string)->then(sub {
+			return $ua->get_p($authUrl->to_unsafe_string)->then(sub {
 				my $tokenTx = shift;
 				if (my $error = $tokenTx->error) {
 					die "failed to fetch token for $repo: " . ($error->{code} ? $error->{code} . ' -- ' : '') . $error->{message};
@@ -139,7 +90,8 @@ sub registry_req_p {
 
 	$url = "https://registry-1.docker.io/v2/$repo/$url";
 
-	return _registry_req_p($uaTries, $method, $repo, $url, %extHeaders);
+	# we allow exactly two tries for a given request to account for at most one auth round-trip + one retry
+	return _registry_req_p(2, $method, $repo, $url, %extHeaders);
 }
 
 use Mojolicious::Lite;
@@ -172,6 +124,8 @@ any [ 'GET', 'HEAD' ] => '/v2/#org/#repo/*url' => sub ($c) {
 
 		$c->res->headers->from_hash({})->from_hash($tx->res->headers->to_hash(1));
 
+		# TODO check for $digest sooner and set $cacheable based on whether the request URL contains the digest returned?
+
 		my $maxAge = 0;
 		if ($cacheable) {
 			# looks like a content-addressable digest -- literally by definition, that content can't change, so let's tell the client that via cache-control (if the response is something resembling success, anyhow)
@@ -194,14 +148,28 @@ any [ 'GET', 'HEAD' ] => '/v2/#org/#repo/*url' => sub ($c) {
 			$c->res->headers->cache_control('no-cache');
 		}
 
+		my $digest = $tx->res->headers->header('docker-content-digest');
+		if (
+			$tx->res->code == 200
+			&& !$c->res->headers->content_length
+			&& $digest
+			&& $digest ne 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' # this is the sha256 of the empty string (zero bytes)
+		) {
+			$c->res->headers->content_length(0); # just in case (because we're adding our own body below)
+			return $c->render(status => 500, data => "response (unexpectedly) missing content-length (digest $digest)");
+		}
+
 		# it doesn't make any sense to redirect HEAD requests -- they're not very cacheable anyhow, so all that does is double the number of requests-per-request
 		if ($tagRequest && $c->req->method ne 'HEAD') {
 			# if we converted the request to HEAD, we need to axe the Content-Length header value because we don't have the content that goes with it :D
 			$c->res->headers->content_length(0);
+			# (and if we're not about to redirect, we're going to error in some way, either our own error or passing along upstream's error, like 404)
 
-			my $digest;
-			if ($digest = $tx->res->headers->header('docker-content-digest')) {
+			if ($digest) {
 				return $c->redirect_to("/v2/$repo/manifests/$digest");
+			}
+			elsif ($tx->res->code == 200) {
+				return $c->render(status => 500, data => 'we converted the request to a HEAD, but we need to generate a redirect and did not get a Docker-Content-Digest header to tell us where to redirect to');
 			}
 		}
 
