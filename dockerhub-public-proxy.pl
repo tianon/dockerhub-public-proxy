@@ -188,7 +188,8 @@ any [ 'GET', 'HEAD' ] => '/v2/#org/#repo/*url' => sub ($c) {
 #	return $c->redirect_to('https://registry-1.docker.io/v2/' . $c->param('url'));
 #};
 get '/v2/' => sub ($c) {
-	# this is often used as a "ping" endpoint
+	# this is often used as a "ping" endpoint (https://github.com/opencontainers/distribution-spec/blob/v1.1.1/spec.md#determining-support)
+	$c->res->headers->cache_control('public, max-age=' . (24 * 60 * 60)); # let's let this be cached for 24h? 🤷 (it could be cached longer but this feels like a good balance between *too* long if it ever does need to change and too short wasting cycles revalidating)
 	$c->render(json => {});
 };
 get '/' => sub ($c) {
