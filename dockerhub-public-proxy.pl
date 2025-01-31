@@ -1,6 +1,8 @@
 #!/usr/bin/env perl
 use Mojo::Base -strict, -signatures;
 
+# see https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control for a good reference on Cache-Control headers in general
+
 use Mojo::UserAgent;
 
 # optional configuration for Docker Hub credentials to help with rate limiting
@@ -189,7 +191,9 @@ any [ 'GET', 'HEAD' ] => '/v2/#org/#repo/*url' => sub ($c) {
 #};
 get '/v2/' => sub ($c) {
 	# this is often used as a "ping" endpoint (https://github.com/opencontainers/distribution-spec/blob/v1.1.1/spec.md#determining-support)
-	$c->res->headers->cache_control('public, max-age=' . (24 * 60 * 60)); # let's let this be cached for 24h? 🤷 (it could be cached longer but this feels like a good balance between *too* long if it ever does need to change and too short wasting cycles revalidating)
+	# let's let this be cached for 24h (possibly reused stale cache up to 48h)? 🤷  we could set this even longer but this feels like a good balance between *too* long if it ever does need to change and too short wasting cycles revalidating all the time
+	my $twentyFourHours = 24 * 60 * 60;
+	$c->res->headers->cache_control("public, max-age=$twentyFourHours, stale-while-revalidate=$twentyFourHours, stale-if-error=$twentyFourHours");
 	$c->render(json => {});
 };
 get '/' => sub ($c) {
