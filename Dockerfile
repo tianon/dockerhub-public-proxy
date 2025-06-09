@@ -46,7 +46,7 @@ ENV LIBEV_FLAGS 4
 
 # https://github.com/mojolicious/mojo/tags
 # https://github.com/mojolicious/mojo/blob/main/Changes
-RUN cpanm Mojolicious@8.73
+RUN cpanm Mojolicious@9.40
 
 EXPOSE 3000
 COPY dockerhub-public-proxy.pl /usr/local/bin/
