@@ -1,4 +1,4 @@
-FROM perl:5.32-slim-bullseye
+FROM perl:5.40-slim-bookworm
 
 RUN set -eux; \
 	apt-get update; \
@@ -38,13 +38,15 @@ RUN set -eux; \
 	cpanm --notest IO::Socket::SSL; \
 	apt-mark auto '.*' > /dev/null; \
 	apt-mark manual $savedAptMark > /dev/null; \
-	apt-get purge -y --auto-remove
+	apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false
 
 # https://metacpan.org/pod/release/SRI/Mojolicious-7.94/lib/Mojo/IOLoop.pm#DESCRIPTION
 ENV LIBEV_FLAGS 4
 # epoll (Linux)
 
-RUN cpanm Mojolicious@8.15
+# https://github.com/mojolicious/mojo/tags
+# https://github.com/mojolicious/mojo/blob/main/Changes
+RUN cpanm Mojolicious@8.73
 
 EXPOSE 3000
 COPY dockerhub-public-proxy.pl /usr/local/bin/
