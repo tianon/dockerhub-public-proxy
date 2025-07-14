@@ -180,9 +180,9 @@ any [ 'GET', 'HEAD' ] => '/v2/#org/#repo/*url' => sub ($c) {
 			}
 		}
 
-		$c->render(data => $tx->res->body, status => $tx->res->code);
+		return $c->render(data => $tx->res->body, status => $tx->res->code);
 	}, sub {
-		$c->reply->exception(@_);
+		return $c->reply->exception(@_);
 	});
 };
 #any '/v2/*url' => { url => '' } => sub {
