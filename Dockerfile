@@ -1,12 +1,11 @@
-FROM perl:5.40-slim-bookworm
+FROM perl:5.40-slim-trixie
 
 RUN set -eux; \
-	apt-get update; \
-	apt-get install -y --no-install-recommends \
+	apt-get install --update -y --no-install-recommends \
 		ca-certificates \
 		wget \
 	; \
-	rm -rf /var/lib/apt/lists/*
+	apt-get dist-clean
 
 # secure by default ♥ (thanks to sri!)
 ENV PERL_CPANM_OPT --verbose --mirror https://cpan.metacpan.org
@@ -20,14 +19,12 @@ RUN cpanm App::cpanminus
 
 RUN set -eux; \
 	savedAptMark="$(apt-mark showmanual)"; \
-	apt-get update; \
-	apt-get install -y --no-install-recommends \
+	apt-get install --update -y --no-install-recommends \
 		gcc \
 		libc-dev \
 		libssl-dev \
 		zlib1g-dev \
 	; \
-	rm -rf /var/lib/apt/lists/*; \
 	cpanm \
 		EV \
 		IO::Socket::IP \
@@ -38,7 +35,8 @@ RUN set -eux; \
 	cpanm --notest IO::Socket::SSL; \
 	apt-mark auto '.*' > /dev/null; \
 	apt-mark manual $savedAptMark > /dev/null; \
-	apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false
+	apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false; \
+	apt-get dist-clean
 
 # https://metacpan.org/pod/release/SRI/Mojolicious-7.94/lib/Mojo/IOLoop.pm#DESCRIPTION
 ENV LIBEV_FLAGS 4
